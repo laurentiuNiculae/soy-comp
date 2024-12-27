@@ -10,7 +10,10 @@ import (
 	"sync"
 )
 
-const encodingType = "webm"
+const (
+	encodingType = "webm"
+	reEncode     = true
+)
 
 func DownloadVideo(videoResource RemoteVideoResource) error {
 	args := []string{}
@@ -88,8 +91,6 @@ func scanAsync(s *bufio.Scanner, wg *sync.WaitGroup) {
 	}
 }
 
-const reEncode = true
-
 func MergeVideos(finalVideoPath string, videos ...VideoResource) error {
 	listPath, err := writeMergeList(videos)
 	if err != nil {
@@ -150,7 +151,7 @@ func writeMergeList(videos []VideoResource) (string, error) {
 		}
 	}
 
-	mergeFilePath, err := filepath.Abs("./bin/merge-list")
+	mergeFilePath, err := filepath.Abs("merge-list")
 	if err != nil {
 		return "", err
 	}

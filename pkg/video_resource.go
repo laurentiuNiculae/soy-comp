@@ -7,9 +7,11 @@ import (
 	"strings"
 )
 
-const cacheBasePath = "./cached-videos"
-const cacheEncoding = "webm"
-const maxVideoQuality = "360"
+const (
+	cacheBasePath   = "./cached-videos"
+	cacheEncoding   = "webm"
+	maxVideoQuality = "360"
+)
 
 type VideoResource interface {
 	CachePath() string
@@ -91,6 +93,11 @@ func NewRemoteVideoResource(videoURL *url.URL, interval *Interval) (RemoteVideoR
 		if err != nil {
 			return nil, err
 		}
+	case TwitchVod:
+		video, err = VideoResourceFromTwitchVodLink(videoURL, interval)
+		if err != nil {
+			return nil, err
+		}
 	default:
 		return nil, fmt.Errorf("not supported url kind")
 	}
@@ -98,7 +105,7 @@ func NewRemoteVideoResource(videoURL *url.URL, interval *Interval) (RemoteVideoR
 	if !video.IsCached() {
 		err = DownloadVideo(video)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 	}
 
@@ -113,6 +120,7 @@ const (
 	YoutubeClip
 	YoutubeMinified
 	TwitchClip
+	TwitchVod
 )
 
 func GetVideoURLKind(videoURL *url.URL) VideoURLKind {
@@ -128,8 +136,11 @@ func GetVideoURLKind(videoURL *url.URL) VideoURLKind {
 	case strings.HasSuffix(videoURL.Host, "youtu.be"):
 		return YoutubeMinified
 	case strings.HasSuffix(videoURL.Host, "twitch.tv"):
-		if strings.Contains(videoURL.Path, "/clip") {
+		switch {
+		case strings.Contains(videoURL.Path, "/clip"):
 			return TwitchClip
+		case strings.Contains(videoURL.Path, "/video"):
+			return TwitchVod
 		}
 		return InvalidLink
 	default:
