@@ -1,5 +1,8 @@
 # soy-comp
 
+> [!WARNING]
+> Code is not very ergonomic and probably has a lot of unexpected bihavior so don't expect much from it
+
 **soy-comp** is a simple video compilation making library that will download and compile a list of videos
 
 You can fully or partially download videos from Youtube and Twitch links.
