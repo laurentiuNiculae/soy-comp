@@ -11,8 +11,7 @@ import (
 )
 
 const (
-	encodingType = "webm"
-	reEncode     = true
+	reEncode = true
 )
 
 func DownloadVideo(videoResource RemoteVideoResource) error {
@@ -26,12 +25,13 @@ func DownloadVideo(videoResource RemoteVideoResource) error {
 	// so this makes sure we get the correct cut. This is why it's not inside the if above
 	args = append(args, "--force-keyframes-at-cuts")
 
-	if videoResource.DownloadFormat() != "" {
-		args = append(args, "-f", videoResource.DownloadFormat())
+	if videoResource.DownloadQualityOptions() != "" {
+		args = append(args, "-f", videoResource.DownloadQualityOptions())
 	}
 
 	args = append(args, "-o", videoResource.CachePath())
-	args = append(args, "--recode-video", encodingType)
+	args = append(args, "--recode-video", videoResource.CacheFileType())
+	args = append(args, "--postprocessor-args", "-vf fps=30 -c:v libx264 -c:a aac -b:a 128k")
 	args = append(args, videoResource.URL().String())
 
 	cmd := exec.Command(
@@ -89,6 +89,65 @@ func scanAsync(s *bufio.Scanner, wg *sync.WaitGroup) {
 	if s.Err() != nil {
 		fmt.Println("Error while scanning: ", s.Err())
 	}
+}
+
+func CutVideo(sourceVideo, outputVideo, intervalStr string) error {
+	args := []string{}
+
+	args = append(args, "-i", sourceVideo)
+	args = append(args, "-y")
+
+	if intervalStr != "" {
+		interval, err := ParseInterval(intervalStr)
+		if err != nil {
+			return err
+		}
+
+		args = append(args, "-ss", interval.Begin.String())
+		if !interval.End.isInf {
+			args = append(args, "-t", interval.Duration().String())
+		}
+	}
+
+	args = append(args, "-c:v", "copy")
+	args = append(args, "-c:a", "copy")
+
+	args = append(args, outputVideo)
+
+	cmd := exec.Command(
+		"ffmpeg",
+		args...,
+	)
+
+	fmt.Println(cmd.String())
+
+	stdOut, err := cmd.StdoutPipe()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	stdErr, err := cmd.StderrPipe()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	if err = cmd.Start(); err != nil {
+		log.Println(err)
+		return err
+	}
+
+	scanOut := bufio.NewScanner(stdOut)
+	scanErr := bufio.NewScanner(stdErr)
+	readCommandOutput(scanOut, scanErr)
+
+	if err = cmd.Wait(); err != nil {
+		log.Println(err)
+		return err
+	}
+
+	return nil
 }
 
 func MergeVideos(finalVideoPath string, videos ...VideoResource) error {

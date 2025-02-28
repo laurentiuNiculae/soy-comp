@@ -1,16 +1,9 @@
 package pkg
 
 import (
-	"fmt"
 	"net/url"
 	"os"
 	"strings"
-)
-
-const (
-	cacheBasePath   = "./cached-videos"
-	cacheEncoding   = "webm"
-	maxVideoQuality = "360"
 )
 
 type VideoResource interface {
@@ -23,13 +16,16 @@ type RemoteVideoResource interface {
 	CachePath() string
 	IsCached() bool
 	URL() *url.URL
-	DownloadFormat() string
+	CacheFileType() string
+	DownloadQualityOptions() string
 }
 
 type BaseRemoteResource struct {
-	videoURL  *url.URL
-	interval  *Interval
-	cachePath string
+	videoURL        *url.URL
+	interval        *Interval
+	cachePath       string
+	cacheFileType   string
+	maxVideoQuality string
 }
 
 func (rr *BaseRemoteResource) URL() *url.URL {
@@ -49,67 +45,8 @@ func (rr *BaseRemoteResource) IsCached() bool {
 	return err == nil
 }
 
-func NewVideoResource(videoSource string, intervalStr string) (VideoResource, error) {
-	interval, err := ParseInterval(intervalStr)
-	if err != nil {
-		return nil, fmt.Errorf("can't parse interval for '%v' interval='%v':\nCaused by: %w", videoSource, intervalStr, err)
-	}
-
-	if videoURL, err := url.Parse(videoSource); err == nil {
-		return NewRemoteVideoResource(videoURL, interval)
-	} else if fileInfo, err := os.Stat(videoSource); err == nil {
-		if fileInfo.IsDir() {
-			return nil, fmt.Errorf("video source can't be a directory")
-		}
-
-		return NewLocalVideoResource(videoSource, interval)
-	} else {
-		return nil, fmt.Errorf("video source is not a valid URL or file Path")
-	}
-}
-
-func NewRemoteVideoResource(videoURL *url.URL, interval *Interval) (RemoteVideoResource, error) {
-	var video RemoteVideoResource
-	var err error
-
-	switch GetVideoURLKind(videoURL) {
-	case YoutubeNormal:
-		video, err = VideoResourceFromFullYoutubeLink(videoURL, interval)
-		if err != nil {
-			return nil, err
-		}
-	case YoutubeClip:
-		video, err = VideoResourceFromYoutubeClipLink(videoURL, interval)
-		if err != nil {
-			return nil, err
-		}
-	case YoutubeMinified:
-		video, err = VideoResourceFromMiniYoutubeLink(videoURL, interval)
-		if err != nil {
-			return nil, err
-		}
-	case TwitchClip:
-		video, err = VideoResourceFromTwitchClipLink(videoURL, interval)
-		if err != nil {
-			return nil, err
-		}
-	case TwitchVod:
-		video, err = VideoResourceFromTwitchVodLink(videoURL, interval)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("not supported url kind")
-	}
-
-	if !video.IsCached() {
-		err = DownloadVideo(video)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return video, nil
+func (rr *BaseRemoteResource) CacheFileType() string {
+	return rr.cacheFileType
 }
 
 type VideoURLKind int
@@ -146,4 +83,33 @@ func GetVideoURLKind(videoURL *url.URL) VideoURLKind {
 	default:
 		return InvalidLink
 	}
+}
+
+type YoutubeVideoResource struct {
+	*BaseRemoteResource
+}
+
+func (yt *YoutubeVideoResource) DownloadQualityOptions() string {
+	return "bestvideo[height<=" + yt.maxVideoQuality + "][protocol=https]+bestaudio[protocol=https]"
+}
+
+type TwitchVideoResource struct {
+	*BaseRemoteResource
+}
+
+func (tw *TwitchVideoResource) DownloadQualityOptions() string {
+	return "best[height<=" + tw.maxVideoQuality + "]"
+}
+
+type LocalVideoResource struct {
+	VideoPath string
+}
+
+func (lv *LocalVideoResource) CachePath() string {
+	return lv.VideoPath
+}
+
+func (lv *LocalVideoResource) IsCached() bool {
+	_, err := os.Stat(lv.VideoPath)
+	return err == nil
 }
